@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+enum ScheduleStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions      Session[]
+  statusChanges OrderStatusHistory[]
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@map("clients")
+}
+
+model Service {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  basePrice     Decimal  @db.Decimal(10, 2)
+  estimatedTime Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@map("services")
+}
+
+model Order {
+  id                 String      @id @default(uuid())
+  clientId           String
+  status             OrderStatus @default(PENDING)
+  totalAmount        Decimal     @db.Decimal(10, 2)
+  cancellationReason String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  client    Client               @relation(fields: [clientId], references: [id])
+  items     OrderItem[]
+  schedules Schedule[]
+  history   OrderStatusHistory[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  serviceId String
+  price     Decimal @db.Decimal(10, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@unique([orderId, serviceId])
+  @@map("order_items")
+}
+
+model MessageTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schedules Schedule[]
+  triggers  FollowUpTrigger[]
+
+  @@map("message_templates")
+}
+
+model FollowUpTrigger {
+  id           String   @id @default(uuid())
+  name         String
+  templateId   String
+  delayMinutes Int
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  template  MessageTemplate @relation(fields: [templateId], references: [id])
+  schedules Schedule[]
+
+  @@map("follow_up_triggers")
+}
+
+model Schedule {
+  id          String         @id @default(uuid())
+  orderId     String
+  templateId  String
+  triggerId   String?
+  scheduledTo DateTime
+  status      ScheduleStatus @default(PENDING)
+  errorLog    String?        @db.Text
+  processedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  order    Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  template MessageTemplate  @relation(fields: [templateId], references: [id])
+  trigger  FollowUpTrigger? @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+
+  @@map("schedules")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model OrderStatusHistory {
+  id              String       @id @default(uuid())
+  orderId         String
+  fromStatus      OrderStatus?
+  toStatus        OrderStatus
+  reason          String?
+  changedByUserId String?
+  createdAt       DateTime     @default(now())
+
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedBy User? @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("order_status_history")
+}
